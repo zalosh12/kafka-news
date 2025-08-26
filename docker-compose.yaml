@@ -1,51 +1,35 @@
 # docker-compose.yml
-version: '3.8'
-
 services:
-  publisher:
-    build: ./publisher
+  # Zookeeper
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
     ports:
-      - "8015:8015"
+      - "2181:2181"
     environment:
-      - KAFKA_BROKER_URL=kafka:9092
-    depends_on:
-      - kafka
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - app-network
 
-  sub_interesting:
-    build: ./consumer
+  # Kafka Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
     ports:
-      - "8016:8000"
+      - "9092:9092"
     environment:
-      - MONGO_URI=mongodb://root:example@mongo:27017/
-      - DB_NAME=newsgroups_db
-      - COLLECTION_NAME=interesting
-      - KAFKA_BROKER_URL=kafka:9092
-      - KAFKA_TOPIC=interesting
-      - KAFKA_GROUP_ID=interesting-group
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
     depends_on:
-      - kafka
-      - mongo
+      - zookeeper
     networks:
       - app-network
 
-  sub_not_interesting:
-    build: ./consumer
-    ports:
-      - "8017:8000"
-    environment:
-      - MONGO_URI=mongodb://root:example@mongo:27017/
-      - DB_NAME=newsgroups_db
-      - COLLECTION_NAME=not_interesting
-      - KAFKA_BROKER_URL=kafka:9092
-      - KAFKA_TOPIC=not_interesting
-      - KAFKA_GROUP_ID =not-interesting-group
-    depends_on:
-      - kafka
-      - mongo
-    networks:
-      - app-network
+  # MongoDB
   mongo:
     image: mongo:6.0
     container_name: mongodb
@@ -54,25 +38,61 @@ services:
     volumes:
       - mongo-data:/data/db
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=root
-      - MONGO_INITDB_ROOT_PASSWORD=example
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
     networks:
       - app-network
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    container_name: kafka
+
+  # Publisher
+  publisher:
+    build: ./publisher
+    container_name: kafka-news-publisher
     ports:
-      - "9092:9092"
+      - "8015:8015"
     environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
-      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9093'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
-      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_BROKER_URL: kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Consumer – Interesting
+  sub_interesting:
+    build: ./consumer
+    container_name: kafka-news-sub_interesting
+    ports:
+      - "8016:8000"
+    environment:
+      MONGO_URI: mongodb://root:example@mongo:27017/
+      DB_NAME: newsgroups_db
+      COLLECTION_NAME: interesting
+      KAFKA_BROKER_URL: kafka:9092
+      KAFKA_TOPIC: interesting
+      KAFKA_GROUP_ID: interesting-group
+    depends_on:
+      - kafka
+      - mongo
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Consumer – Not Interesting
+  sub_not_interesting:
+    build: ./consumer
+    container_name: kafka-news-sub_not_interesting
+    ports:
+      - "8017:8000"
+    environment:
+      MONGO_URI: mongodb://root:example@mongo:27017/
+      DB_NAME: newsgroups_db
+      COLLECTION_NAME: not_interesting
+      KAFKA_BROKER_URL: kafka:9092
+      KAFKA_TOPIC: not_interesting
+      KAFKA_GROUP_ID: not-interesting-group
+    depends_on:
+      - kafka
+      - mongo
     networks:
       - app-network
 
@@ -83,3 +103,4 @@ volumes:
 networks:
   app-network:
     driver: bridge
+

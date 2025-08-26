@@ -1,5 +1,5 @@
-from .producer import send_message
-from .data import interesting_data, not_interesting_data
+from producer import send_message
+from data import interesting_data, not_interesting_data
 
 TOPIC_INTERESTING = "interesting"
 TOPIC_NOT_INTERESTING = "not_interesting"
